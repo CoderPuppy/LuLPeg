@@ -20,8 +20,8 @@ local _ENV = u.noglobals() ---------------------------------------------------
 
 local t_concat = t.concat
 
-local   checkstring,   copy,   fold,   load,   map_fold,   map_foldr,   setify, t_pack, t_unpack
-    = u.checkstring, u.copy, u.fold, u.load, u.map_fold, u.map_foldr, u.setify, u.pack, u.unpack
+local   checkstring,   copy,   fold,   map_fold,   map_foldr,   setify, t_pack, t_unpack
+    = u.checkstring, u.copy, u.fold, u.map_fold, u.map_foldr, u.setify, u.pack, u.unpack
 
 --[[DBG]] local expose = u.expose
 
@@ -51,9 +51,9 @@ local truept, falsept, Cppt
 local    split_int,    validate
     = cs.split_int, cs.validate
 
-local Range, Set, S_union, S_tostring
+local Range, Set, S_union
     = Builder.Range, Builder.set.new
-    , Builder.set.union, Builder.set.tostring
+    , Builder.set.union
 
 -- factorizers, defined at the end of the file.
 local factorize_choice, factorize_lookahead, factorize_sequence, factorize_unm

@@ -16,8 +16,8 @@ local _ENV = u.noglobals() ----------------------------------------------------
 local s_char, s_sub, t_concat
     = s.char, s.sub, t.concat
 
-local   expose,   load,   map
-    = u.expose, u.load, u.map
+local   expose,   map
+    = u.expose, u.map
 
 local escape_index = {
     ["\f"] = "\\f",
@@ -46,7 +46,11 @@ end
 
 local
 function set_repr (set)
-    return s_char(load("return "..S_tostring(set))())
+    local s = ''
+    for cs in (S_tostring(set) .. ','):gmatch '(%d+),' do
+        s = s .. s_char(tonumber(cs))
+    end
+    return s
 end
 
 
@@ -69,104 +73,117 @@ function LL.pprint (pt0)
     return pt0
 end
 
-for k, v in pairs{
-    string       = [[ "P( \""..escape(pt.as_is).."\" )"       ]],
-    char         = [[ "P( \""..escape(to_char(pt.aux)).."\" )"]],
-    ["true"]     = [[ "P( true )"                     ]],
-    ["false"]    = [[ "P( false )"                    ]],
-    eos          = [[ "~EOS~"                         ]],
-    one          = [[ "P( one )"                      ]],
-    any          = [[ "P( "..pt.aux.." )"             ]],
-    set          = [[ "S( "..'"'..escape(set_repr(pt.aux))..'"'.." )" ]],
-    ["function"] = [[ "P( "..pt.aux.." )"             ]],
-    ref = [[
+printers.string = function (pt, offset, prefix)
+    print(t_concat{offset,prefix,"P( \""..escape(pt.as_is).."\" )"})
+end
+printers.char = function (pt, offset, prefix)
+    print(t_concat{offset,prefix,"P( \""..escape(to_char(pt.aux)).."\" )"})
+end
+printers["true"] = function (pt, offset, prefix)
+    print(t_concat{offset,prefix,"P( true )"})
+end
+printers["false"] = function (pt, offset, prefix)
+    print(t_concat{offset,prefix,"P( false )"})
+end
+printers.eos = function (pt, offset, prefix)
+    print(t_concat{offset,prefix,"~EOS~"})
+end
+printers.one = function (pt, offset, prefix)
+    print(t_concat{offset,prefix,"P( one )"})
+end
+printers.any = function (pt, offset, prefix)
+    print(t_concat{offset,prefix,"P( "..pt.aux.." )"})
+end
+printers.set = function (pt, offset, prefix)
+    print(t_concat{offset,prefix,"S( "..'"'..escape(set_repr(pt.aux))..'"'.." )"})
+end
+printers["function"] = function (pt, offset, prefix)
+    print(t_concat{offset,prefix,"P( "..pt.aux.." )"})
+end
+printers.ref = function (pt, offset, prefix)
+    print(t_concat{offset,prefix,
         "V( ",
             (type(pt.aux) == "string" and "\""..pt.aux.."\"")
                           or tostring(pt.aux)
         , " )"
-        ]],
-    range = [[
+    })
+end
+printers.range = function (pt, offset, prefix)
+    print(t_concat{offset,prefix,
         "R( ",
             escape(t_concat(map(
                 pt.as_is,
                 function(e) return '"'..e..'"' end)
             , ", "))
         ," )"
-        ]]
-} do
-    printers[k] = load(([==[
-        local k, map, t_concat, to_char, escape, set_repr = ...
-        return function (pt, offset, prefix)
-            print(t_concat{offset,prefix,XXXX})
-        end
-    ]==]):gsub("XXXX", v), k.." printer")(k, map, t_concat, s_char, escape, set_repr)
+    })
 end
 
+printers.behind = function (pt, offset, prefix)
+    LL_pprint(pt.pattern, offset, "B ")
+end
+printers["at least"] = function (pt, offset, prefix)
+    LL_pprint(pt.pattern, offset, pt.aux.." ^ ")
+end
+printers["at most"] = function (pt, offset, prefix)
+    LL_pprint(pt.pattern, offset, pt.aux.." ^ ")
+end
+printers.unm = function (pt, offset, prefix)
+    LL_pprint(pt.pattern, offset, "- ")
+end
+printers.lookahead = function (pt, offset, prefix)
+    LL_pprint(pt.pattern, offset, "# ")
+end
+printers.choice = function (pt, offset, prefix)
+    print(offset..prefix.."+")
+    -- dprint"Printer for choice"
+    local ch, i = {}, 1
+    while pt.pkind == "choice" do
+        ch[i], pt, i = pt[1], pt[2], i + 1
+    end
+    ch[i] = pt
 
-for k, v in pairs{
-    ["behind"] = [[ LL_pprint(pt.pattern, offset, "B ") ]],
-    ["at least"] = [[ LL_pprint(pt.pattern, offset, pt.aux.." ^ ") ]],
-    ["at most"] = [[ LL_pprint(pt.pattern, offset, pt.aux.." ^ ") ]],
-    unm        = [[LL_pprint(pt.pattern, offset, "- ")]],
-    lookahead  = [[LL_pprint(pt.pattern, offset, "# ")]],
-    choice = [[
-        print(offset..prefix.."+")
-        -- dprint"Printer for choice"
-        local ch, i = {}, 1
-        while pt.pkind == "choice" do
-            ch[i], pt, i = pt[1], pt[2], i + 1
-        end
-        ch[i] = pt
-
-        map(ch, LL_pprint, offset.." :", "")
-        ]],
-    sequence = [=[
-        -- print("Seq printer", s, u)
-        -- u.expose(pt)
-        print(offset..prefix.."*")
-        local acc, p2 = {}
-        offset = offset .. " |"
-        while true do
-            if pt.pkind ~= "sequence" then -- last element
-                if pt.pkind == "char" then
-                    acc[#acc + 1] = pt.aux
-                    print(offset..'P( "'..s.char(u.unpack(acc))..'" )')
-                else
-                    if #acc ~= 0 then
-                        print(offset..'P( "'..s.char(u.unpack(acc))..'" )')
-                    end
-                    LL_pprint(pt, offset, "")
-                end
-                break
-            elseif pt[1].pkind == "char" then
-                acc[#acc + 1] = pt[1].aux
-            elseif #acc ~= 0 then
+    map(ch, LL_pprint, offset.." :", "")
+end
+printers.sequence = function (pt, offset, prefix)
+    -- print("Seq printer", s, u)
+    -- u.expose(pt)
+    print(offset..prefix.."*")
+    local acc, p2 = {}
+    offset = offset .. " |"
+    while true do
+        if pt.pkind ~= "sequence" then -- last element
+            if pt.pkind == "char" then
+                acc[#acc + 1] = pt.aux
                 print(offset..'P( "'..s.char(u.unpack(acc))..'" )')
-                acc = {}
-                LL_pprint(pt[1], offset, "")
             else
-                LL_pprint(pt[1], offset, "")
+                if #acc ~= 0 then
+                    print(offset..'P( "'..s.char(u.unpack(acc))..'" )')
+                end
+                LL_pprint(pt, offset, "")
             end
-            pt = pt[2]
+            break
+        elseif pt[1].pkind == "char" then
+            acc[#acc + 1] = pt[1].aux
+        elseif #acc ~= 0 then
+            print(offset..'P( "'..s.char(u.unpack(acc))..'" )')
+            acc = {}
+            LL_pprint(pt[1], offset, "")
+        else
+            LL_pprint(pt[1], offset, "")
         end
-        ]=],
-    grammar   = [[
-        print(offset..prefix.."Grammar")
-        -- dprint"Printer for Grammar"
-        for k, pt in pairs(pt.aux) do
-            local prefix = ( type(k)~="string"
-                             and tostring(k)
-                             or "\""..k.."\"" )
-            LL_pprint(pt, offset.."  ", prefix .. " = ")
-        end
-    ]]
-} do
-    printers[k] = load(([[
-        local map, LL_pprint, pkind, s, u, flatten = ...
-        return function (pt, offset, prefix)
-            XXXX
-        end
-    ]]):gsub("XXXX", v), k.." printer")(map, LL_pprint, type, s, u, flatten)
+        pt = pt[2]
+    end
+end
+printers.grammar = function (pt, offset, prefix)
+    print(offset..prefix.."Grammar")
+    -- dprint"Printer for Grammar"
+    for k, pt in pairs(pt.aux) do
+        local prefix = ( type(k)~="string"
+        and tostring(k)
+        or "\""..k.."\"" )
+        LL_pprint(pt, offset.."  ", prefix .. " = ")
+    end
 end
 
 -------------------------------------------------------------------------------

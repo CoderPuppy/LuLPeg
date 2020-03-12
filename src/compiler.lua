@@ -11,11 +11,11 @@ local _ENV = u.noglobals() ----------------------------------------------------
 
 
 
-local s_byte, s_sub, t_concat, t_insert, t_remove, t_unpack
-    = s.byte, s.sub, t.concat, t.insert, t.remove, u.unpack
+local s_char, s_byte, s_sub, t_concat, t_insert, t_remove, t_unpack
+    = s.char, s.byte, s.sub, t.concat, t.insert, t.remove, u.unpack
 
-local   load,   map,   map_all, t_pack
-    = u.load, u.map, u.map_all, u.pack
+local   map,   map_all, t_pack
+    = u.map, u.map_all, u.pack
 
 local expose = u.expose
 
@@ -186,15 +186,13 @@ for _, v in pairs{
     "C", "Cf", "Cg", "Cs", "Ct", "Clb",
     "div_string", "div_table", "div_number", "div_function"
 } do
-    compilers[v] = load(([=[
-    local compile, expose, type, LL = ...
-    return function (pt, ccache)
-        -- [[DBG]] print("Compiling", "XXXX")
+    compilers[v] = function (pt, ccache)
+        -- [[DBG]] print("Compiling", v)
         -- [[DBG]] expose(LL.getdirect(pt))
         -- [[DBG]] LL.pprint(pt)
         local matcher, this_aux = compile(pt.pattern, ccache), pt.aux
         return function (sbj, si, caps, ci, state)
-            -- [[DBG]] print("XXXX: ci = ", ci, "             ", "", ", si = ", si, ", type(this_aux) = ", type(this_aux), this_aux)
+            -- [[DBG]] print(v .. ": ci = ", ci, "             ", "", ", si = ", si, ", type(this_aux) = ", type(this_aux), this_aux)
             -- [[DBG]] expose(caps)
 
             local ref_ci = ci
@@ -202,7 +200,7 @@ for _, v in pairs{
             local kind, bounds, openclose, aux
                 = caps.kind, caps.bounds, caps.openclose, caps.aux
 
-            kind      [ci] = "XXXX"
+            kind      [ci] = v
             bounds    [ci] = si
             -- openclose = 0 ==> bound is lower bound of the capture.
             openclose [ci] = 0
@@ -213,14 +211,14 @@ for _, v in pairs{
             success, si, ci
                 = matcher(sbj, si, caps, ci + 1, state)
             if success then
-                -- [[DBG]] print("/XXXX: ci = ", ci, ", ref_ci = ", ref_ci, ", si = ", si)
+                -- [[DBG]] print("/" .. v .. ": ci = ", ci, ", ref_ci = ", ref_ci, ", si = ", si)
                 if ci == ref_ci + 1 then
                     -- [[DBG]] print("full", si)
                     -- a full capture, ==> openclose > 0 == the closing bound.
                     caps.openclose[ref_ci] = si
                 else
                     -- [[DBG]] print("closing", si)
-                    kind      [ci] = "XXXX"
+                    kind      [ci] = v
                     bounds    [ci] = si
                     -- a closing bound. openclose < 0
                     -- (offset in the capture stack between open and close)
@@ -231,12 +229,12 @@ for _, v in pairs{
                 -- [[DBG]] expose(caps)
             else
                 ci = ci - 1
-                -- [[DBG]] print("///XXXX: ci = ", ci, ", ref_ci = ", ref_ci, ", si = ", si)
+                -- [[DBG]] print("///" .. v .. ": ci = ", ci, ", ref_ci = ", ref_ci, ", si = ", si)
                 -- [[DBG]] expose(caps)
             end
             return success, si, ci
         end
-    end]=]):gsub("XXXX", v), v.." compiler")(compile, expose, type, LL)
+    end
 end
 
 
@@ -266,14 +264,12 @@ end
 for _, v in pairs{
     "Cb", "Cc", "Cp"
 } do
-    compilers[v] = load(([=[
-    -- [[DBG]]local expose = ...
-    return function (pt, ccache)
+    compilers[v] = function (pt, ccache)
         local this_aux = pt.aux
         return function (sbj, si, caps, ci, state)
-            -- [[DBG]] print("XXXX: ci = ", ci, ", aux = ", this_aux, ", si = ", si)
+            -- [[DBG]] print(v .. ": ci = ", ci, ", aux = ", this_aux, ", si = ", si)
 
-            caps.kind      [ci] = "XXXX"
+            caps.kind      [ci] = v
             caps.bounds    [ci] = si
             caps.openclose [ci] = si
             caps.aux       [ci] = this_aux or false
@@ -281,7 +277,7 @@ for _, v in pairs{
             -- [[DBG]] expose(caps)
             return true, si, ci + 1
         end
-    end]=]):gsub("XXXX", v), v.." compiler")(expose)
+    end
 end
 
 
@@ -415,16 +411,14 @@ end
 
 
 compilers["char"] = function (pt, ccache)
-    return load(([=[
-        local s_byte, s_char = ...
-        return function(sbj, si, caps, ci, state)
-            -- [[DBG]] print("Char "..s_char(__C0__).." ", caps.kind[ci - 1], ", si = "..si, ", ci = "..ci, sbj:sub(1, si - 1))
-            local c, nsi = s_byte(sbj, si), si + 1
-            if c ~= __C0__ then
-                return false, si, ci
-            end
-            return true, nsi, ci
-        end]=]):gsub("__C0__", tostring(pt.aux)))(s_byte, ("").char)
+    return function(sbj, si, caps, ci, state)
+        -- [[DBG]] print("Char "..s_char(pt.aux).." ", caps.kind[ci - 1], ", si = "..si, ", ci = "..ci, sbj:sub(1, si - 1))
+        local c, nsi = s_byte(sbj, si), si + 1
+        if c ~= pt.aux then
+            return false, si, ci
+        end
+        return true, nsi, ci
+    end
 end
 
 
@@ -584,18 +578,6 @@ compilers["ref"] = function (pt, ccache)
 end
 
 
-
--- Unroll the loop using a template:
-local choice_tpl = [=[
-             -- [[DBG]] print(" Choice XXXX, si = ", si, ", ci = ", ci)
-            success, si, ci = XXXX(sbj, si, caps, ci, state)
-             -- [[DBG]] print(" /Choice XXXX, si = ", si, ", ci = ", ci, ", success = ", success)
-            if success then
-                return true, si, ci
-            else
-                --clear_captures(aux, ci)
-            end]=]
-
 local function flatten(kind, pt, ccache)
     if pt[2].pkind == kind then
         return compile(pt[1], ccache), flatten(kind, pt[2], ccache)
@@ -606,64 +588,43 @@ end
 
 compilers["choice"] = function (pt, ccache)
     local choices = {flatten("choice", pt, ccache)}
-    local names, chunks = {}, {}
-    for i = 1, #choices do
-        local m = "ch"..i
-        names[#names + 1] = m
-        chunks[ #names  ] = choice_tpl:gsub("XXXX", m)
+    return function (sbj, si, caps, ci, state)
+         -- [[DBG]] print("Choice ", ", si = "..si, ", ci = "..ci, sbj:sub(1, si-1)) --, sbj)
+        local aux, success = caps.aux, false
+        for i = 1, #choices do
+             -- [[DBG]] print(" Choice " .. tostring(i) .. ", si = ", si, ", ci = ", ci)
+            success, si, ci = choices[i](sbj, si, caps, ci, state)
+             -- [[DBG]] print(" /Choice " .. tostring(i) .. ", si = ", si, ", ci = ", ci, ", success = ", success)
+            if success then
+                return true, si, ci
+            else
+                --clear_captures(aux, ci)
+            end
+        end
+         -- [[DBG]] print("/Choice ", ", si = "..si, ", ci = "..ci, sbj:sub(1, si-1)) --, sbj)
+        return false, si, ci
     end
-    names[#names + 1] = "clear_captures"
-    choices[ #names ] = clear_captures
-    local compiled = t_concat{
-        "local ", t_concat(names, ", "), [=[ = ...
-        return function (sbj, si, caps, ci, state)
-             -- [[DBG]] print("Choice ", ", si = "..si, ", ci = "..ci, sbj:sub(1, si-1)) --, sbj)
-            local aux, success = caps.aux, false
-            ]=],
-            t_concat(chunks,"\n"),[=[--
-             -- [[DBG]] print("/Choice ", ", si = "..si, ", ci = "..ci, sbj:sub(1, si-1)) --, sbj)
-            return false, si, ci
-        end]=]
-    }
-    -- print(compiled)
-    return load(compiled, "Choice")(t_unpack(choices))
 end
 
 
 
-local sequence_tpl = [=[
-            -- [[DBG]] print(" Seq XXXX , si = ",si, ", ci = ", ci)
-            success, si, ci = XXXX(sbj, si, caps, ci, state)
-            -- [[DBG]] print(" /Seq XXXX , si = ",si, ", ci = ", ci, ", success = ", success)
-            if not success then
-                -- clear_captures(caps.aux, ref_ci)
-                return false, ref_si, ref_ci
-            end]=]
 compilers["sequence"] = function (pt, ccache)
     local sequence = {flatten("sequence", pt, ccache)}
-    local names, chunks = {}, {}
-    -- print(n)
-    -- for k,v in pairs(pt.aux) do print(k,v) end
-    for i = 1, #sequence do
-        local m = "seq"..i
-        names[#names + 1] = m
-        chunks[ #names  ] = sequence_tpl:gsub("XXXX", m)
+    return function (sbj, si, caps, ci, state)
+        local ref_si, ref_ci, success = si, ci
+         -- [[DBG]] print("Sequence ", ", si = "..si, ", ci = "..ci, sbj:sub(1, si-1)) --, sbj)
+         for i = 1, #sequence do
+             -- [[DBG]] print(" Seq " .. tostring(i) .. " , si = ",si, ", ci = ", ci)
+             success, si, ci = sequence[i](sbj, si, caps, ci, state)
+             -- [[DBG]] print(" /Seq " .. tostring(i) .. " , si = ",si, ", ci = ", ci, ", success = ", success)
+             if not success then
+                 -- clear_captures(caps.aux, ref_ci)
+                 return false, ref_si, ref_ci
+             end
+         end
+         -- [[DBG]] print("/Sequence ", ", si = "..si, ", ci = "..ci, sbj:sub(1, si-1)) --, sbj)
+        return true, si, ci
     end
-    names[#names + 1] = "clear_captures"
-    sequence[ #names ] = clear_captures
-    local compiled = t_concat{
-        "local ", t_concat(names, ", "), [=[ = ...
-        return function (sbj, si, caps, ci, state)
-            local ref_si, ref_ci, success = si, ci
-             -- [[DBG]] print("Sequence ", ", si = "..si, ", ci = "..ci, sbj:sub(1, si-1)) --, sbj)
-            ]=],
-            t_concat(chunks,"\n"),[=[
-             -- [[DBG]] print("/Sequence ", ", si = "..si, ", ci = "..ci, sbj:sub(1, si-1)) --, sbj)
-            return true, si, ci
-        end]=]
-    }
-    -- print(compiled)
-   return load(compiled, "Sequence")(t_unpack(sequence))
 end
 
 

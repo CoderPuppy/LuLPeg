@@ -3,10 +3,10 @@
 
 --[[DGB]] local debug = require"debug"
 
-local getmetatable, setmetatable, load, loadstring, next
+local getmetatable, setmetatable, next
     , pairs, pcall, print, rawget, rawset, select, tostring
     , type, unpack
-    = getmetatable, setmetatable, load, loadstring, next
+    = getmetatable, setmetatable, next
     , pairs, pcall, print, rawget, rawset, select, tostring
     , type, unpack
 
@@ -55,27 +55,6 @@ local util = {
 
 util.unpack = t.unpack or unpack
 util.pack = t.pack or function(...) return { n = select('#', ...), ... } end
-
-
-if compat.lua51 then
-    local old_load = load
-
-   function util.load (ld, source, mode, env)
-     -- We ignore mode. Both source and bytecode can be loaded.
-     local fun
-     if type (ld) == 'string' then
-       fun = loadstring (ld)
-     else
-       fun = old_load (ld, source)
-     end
-     if env then
-       setfenv (fun, env)
-     end
-     return fun
-   end
-else
-    util.load = load
-end
 
 if compat.luajit and compat.jit then
     function util.max (ary)

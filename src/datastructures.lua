@@ -17,8 +17,8 @@ local _ENV = u.noglobals() ----------------------------------------------------
 
 
 
-local   extend,   load, u_max
-    = u.extend, u.load, u.max
+local   extend, u_max
+    = u.extend, u.max
 
 --[[DBG]] local expose = u.expose
 
@@ -41,12 +41,11 @@ local byteset_mt = {}
 
 local
 function byteset_constructor (upper)
-    local set = setmetatable(load(t_concat{
-        "return{ [0]=false",
-        (", false"):rep(upper),
-        " }"
-    })(),
-    byteset_mt)
+    local t = { [0] = false; }
+    for i = 1, upper do
+        t[i] = false
+    end
+    local set = setmetatable(t, byteset_mt)
     return set
 end
 

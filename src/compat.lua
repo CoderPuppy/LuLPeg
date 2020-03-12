@@ -24,8 +24,7 @@ local compat = {
         local prox2 = newproxy(prox)
         assert (type(getmetatable(prox)) == "table"
                 and (getmetatable(prox)) == (getmetatable(prox2)))
-    end),
-    _goto = not not(loadstring or load)"::R::"
+    end)
 }
 
 
